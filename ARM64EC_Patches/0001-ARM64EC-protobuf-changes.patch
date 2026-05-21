@@ -1,0 +1,34 @@
+From bded2221e0e870e201634552c04411050fbecca4 Mon Sep 17 00:00:00 2001
+From: Harish Raja Selvan <harish.rajaselvan@multicorewareinc.com>
+Date: Wed, 20 May 2026 01:11:52 -0700
+Subject: [PATCH] ARM64EC protobuf changes
+
+---
+ src/google/protobuf/stubs/platform_macros.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/google/protobuf/stubs/platform_macros.h b/src/google/protobuf/stubs/platform_macros.h
+index ce1b1e365..53c5fe4d1 100644
+--- a/src/google/protobuf/stubs/platform_macros.h
++++ b/src/google/protobuf/stubs/platform_macros.h
+@@ -38,7 +38,7 @@
+ //   http://msdn.microsoft.com/en-us/library/b0084kay.aspx
+ //   http://www.agner.org/optimize/calling_conventions.pdf
+ //   or with gcc, run: "echo | gcc -E -dM -"
+-#if defined(_M_X64) || defined(__x86_64__)
++#if (defined(_M_X64) || defined(__x86_64__)) && !defined(_M_ARM64EC)
+ #define GOOGLE_PROTOBUF_ARCH_X64 1
+ #define GOOGLE_PROTOBUF_ARCH_64_BIT 1
+ #elif defined(_M_IX86) || defined(__i386__)
+@@ -50,7 +50,7 @@
+ #elif defined(_M_ARM) || defined(__ARMEL__)
+ #define GOOGLE_PROTOBUF_ARCH_ARM 1
+ #define GOOGLE_PROTOBUF_ARCH_32_BIT 1
+-#elif defined(_M_ARM64)
++#elif defined(_M_ARM64) || defined(_M_ARM64EC)
+ #define GOOGLE_PROTOBUF_ARCH_ARM 1
+ #define GOOGLE_PROTOBUF_ARCH_64_BIT 1
+ #elif defined(__aarch64__)
+-- 
+2.53.0.windows.1
+

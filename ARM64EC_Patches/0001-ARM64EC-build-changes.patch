@@ -1,0 +1,194 @@
+From 597dcae82ddcb81d6a30e6475abb40bc3cef22e7 Mon Sep 17 00:00:00 2001
+From: Harish Raja Selvan <harish.rajaselvan@multicorewareinc.com>
+Date: Wed, 20 May 2026 01:02:57 -0700
+Subject: [PATCH] ARM64EC build changes
+
+---
+ build_config.h                   |  4 +--
+ config/BUILDCONFIG.gn            |  2 +-
+ config/compiler/BUILD.gn         |  2 +-
+ config/win/BUILD.gn              |  2 +-
+ toolchain/win/setup_toolchain.py |  2 +-
+ toolchain/win/toolchain.gni      | 49 +++++++++++++++++++++++++++-----
+ 6 files changed, 48 insertions(+), 13 deletions(-)
+
+diff --git a/build_config.h b/build_config.h
+index a993e1e44..5fab6d9aa 100644
+--- a/build_config.h
++++ b/build_config.h
+@@ -259,7 +259,7 @@
+ //   http://msdn.microsoft.com/en-us/library/b0084kay.aspx
+ //   http://www.agner.org/optimize/calling_conventions.pdf
+ //   or with gcc, run: "echo | gcc -E -dM -"
+-#if defined(_M_X64) || defined(__x86_64__)
++#if (defined(_M_X64) || defined(__x86_64__)) && !defined(_M_ARM64EC)
+ #define ARCH_CPU_X86_FAMILY 1
+ #define ARCH_CPU_X86_64 1
+ #define ARCH_CPU_64_BITS 1
+@@ -294,7 +294,7 @@
+ #define ARCH_CPU_ARMEL 1
+ #define ARCH_CPU_32_BITS 1
+ #define ARCH_CPU_LITTLE_ENDIAN 1
+-#elif defined(__aarch64__) || defined(_M_ARM64)
++#elif defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
+ #define ARCH_CPU_ARM_FAMILY 1
+ #define ARCH_CPU_ARM64 1
+ #define ARCH_CPU_64_BITS 1
+diff --git a/config/BUILDCONFIG.gn b/config/BUILDCONFIG.gn
+index c737e53c2..03968d286 100644
+--- a/config/BUILDCONFIG.gn
++++ b/config/BUILDCONFIG.gn
+@@ -134,7 +134,7 @@ declare_args() {
+   # which can halve overall performance, and do increase memory usage. Always
+   # set "is_official_build" to true for any build intended to ship to end-users.
+   is_official_build = false
+-
++  is_arm64ec = false
+   # Set to true when compiling with the Clang compiler.
+   is_clang = current_os != "linux" ||
+              (current_cpu != "s390x" && current_cpu != "s390" &&
+diff --git a/config/compiler/BUILD.gn b/config/compiler/BUILD.gn
+index df8610696..e8dd745c8 100644
+--- a/config/compiler/BUILD.gn
++++ b/config/compiler/BUILD.gn
+@@ -1935,7 +1935,7 @@ if (is_win) {
+   common_optimize_on_cflags = [
+     "/Ob2",  # Both explicit and auto inlining.
+     "/Oy-",  # Disable omitting frame pointers, must be after /O2.
+-    "/Zc:inline",  # Remove unreferenced COMDAT (faster links).
++    #"/Zc:inline",  # Remove unreferenced COMDAT (faster links).
+   ]
+   if (!is_asan) {
+     common_optimize_on_cflags += [
+diff --git a/config/win/BUILD.gn b/config/win/BUILD.gn
+index abde4a97d..fcf1226c0 100644
+--- a/config/win/BUILD.gn
++++ b/config/win/BUILD.gn
+@@ -556,7 +556,7 @@ config("default_incremental_linking") {
+   # builds where performance is not job one.
+   # TODO(thakis): Always turn this on with lld, no reason not to.
+   if (is_debug || is_component_build) {
+-    ldflags = [ "/INCREMENTAL" ]
++    ldflags = [ "/INCREMENTAL:NO" ]
+     if (use_lld) {
+       # lld doesn't use ilk files and doesn't really have an incremental link
+       # mode; the only effect of the flag is that the .lib file timestamp isn't
+diff --git a/toolchain/win/setup_toolchain.py b/toolchain/win/setup_toolchain.py
+index e680ba07e..850488feb 100644
+--- a/toolchain/win/setup_toolchain.py
++++ b/toolchain/win/setup_toolchain.py
+@@ -184,7 +184,7 @@ def _LoadToolchainEnv(cpu, toolchain_root, sdk_dir, target_store):
+     # Explicitly specifying the SDK version to build with to avoid accidentally
+     # building with a new and untested SDK. This should stay in sync with the
+     # packaged toolchain in build/vs_toolchain.py.
+-    args.append('10.0.20348.0')
++    args.append('10.0.26100.0')
+     variables = _LoadEnvFromBat(args)
+   return _ExtractImportantEnvironment(variables)
+ 
+diff --git a/toolchain/win/toolchain.gni b/toolchain/win/toolchain.gni
+index e7fd62098..8f57b9928 100644
+--- a/toolchain/win/toolchain.gni
++++ b/toolchain/win/toolchain.gni
+@@ -210,7 +210,12 @@ template("msvc_toolchain") {
+ 
+       # Note that the code coverage wrapper scripts assumes that {{source}}
+       # comes immediately after /c.
+-      command = "$coverage_wrapper$env_wrapper$cl /c {{source}} /nologo $show_includes $sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} /Fo{{output}} /Fd\"$pdbname\""
++
++      if (toolchain_args.current_cpu == "arm64" && is_arm64ec == true) {
++          command = "$coverage_wrapper$env_wrapper$cl /c {{source}} /arm64EC /nologo $show_includes $sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} /Fo{{output}} /Fd\"$pdbname\""
++      } else {
++          command = "$coverage_wrapper$env_wrapper$cl /c {{source}} /nologo $show_includes $sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} /Fo{{output}} /Fd\"$pdbname\""
++      }
+     }
+ 
+     tool("cxx") {
+@@ -226,7 +231,12 @@ template("msvc_toolchain") {
+ 
+       # Note that the code coverage wrapper scripts assumes that {{source}}
+       # comes immediately after /c.
+-      command = "$coverage_wrapper$env_wrapper$cl /c {{source}} /Fo{{output}} /nologo $show_includes $sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} /Fd\"$pdbname\""
++      
++      if (toolchain_args.current_cpu == "arm64" && is_arm64ec == true) {
++          command = "$coverage_wrapper$env_wrapper$cl /c {{source}} /Fo{{output}} /arm64EC /nologo $show_includes $sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} /Fd\"$pdbname\""
++      } else {
++          command = "$coverage_wrapper$env_wrapper$cl /c {{source}} /Fo{{output}} /nologo $show_includes $sys_include_flags{{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} /Fd\"$pdbname\""
++      }
+     }
+ 
+     tool("rc") {
+@@ -263,7 +273,11 @@ template("msvc_toolchain") {
+       }
+ 
+       if (is_msvc_assembler) {
+-        ml += " /nologo /Fo{{output}}"
++        if (toolchain_args.current_cpu == "arm64" && is_arm64ec == true) {
++          ml += " -machine ARM64EC /nologo /Fo{{output}}"
++        } else {
++          ml += " /nologo /Fo{{output}}"
++        }
+ 
+         # Suppress final-stage linking on x64/x86 builds. (Armasm64 does not
+         # require /c because it doesn't support linking.)
+@@ -367,8 +381,14 @@ template("msvc_toolchain") {
+ 
+     tool("alink") {
+       rspfile = "{{output}}.rsp"
+-      command =
++
++      if (toolchain_args.current_cpu == "arm64" && is_arm64ec == true) {
++        command =
++          "$linker_wrapper$lib /OUT:{{output}} /MACHINE:ARM64EC /nologo {{arflags}} @$rspfile"
++      } else {
++        command =
+           "$linker_wrapper$lib /OUT:{{output}} /nologo {{arflags}} @$rspfile"
++      }
+       description = "LIB {{output}}"
+       outputs = [
+         # Ignore {{output_extension}} and always use .lib, there's no reason to
+@@ -391,7 +411,12 @@ template("msvc_toolchain") {
+       rspfile = "${dllname}.rsp"
+       pool = "//build/toolchain:link_pool($default_toolchain)"
+ 
+-      command = "$linker_wrapper$link /OUT:$dllname /nologo ${sys_lib_flags}/IMPLIB:$libname /DLL /PDB:$pdbname @$rspfile"
++
++      if (toolchain_args.current_cpu == "arm64" && is_arm64ec == true) {
++        command = "$linker_wrapper$link /OUT:$dllname /MACHINE:ARM64EC /nologo ${sys_lib_flags}/IMPLIB:$libname /DLL /PDB:$pdbname @$rspfile"
++      } else {
++        command = "$linker_wrapper$link /OUT:$dllname /nologo ${sys_lib_flags}/IMPLIB:$libname /DLL /PDB:$pdbname @$rspfile"
++      }
+ 
+       default_output_extension = ".dll"
+       default_output_dir = "{{root_out_dir}}"
+@@ -426,7 +451,12 @@ template("msvc_toolchain") {
+       rspfile = "${dllname}.rsp"
+       pool = "//build/toolchain:link_pool($default_toolchain)"
+ 
+-      command = "$linker_wrapper$link /OUT:$dllname /nologo ${sys_lib_flags}/DLL /PDB:$pdbname @$rspfile"
++
++      if (toolchain_args.current_cpu == "arm64" && is_arm64ec == true) {
++        command = "$linker_wrapper$link /OUT:$dllname /MACHINE:ARM64EC /nologo ${sys_lib_flags}/DLL /PDB:$pdbname @$rspfile"
++      } else {
++        command = "$linker_wrapper$link /OUT:$dllname /nologo ${sys_lib_flags}/DLL /PDB:$pdbname @$rspfile"
++      }
+ 
+       default_output_extension = ".dll"
+       default_output_dir = "{{root_out_dir}}"
+@@ -449,7 +479,12 @@ template("msvc_toolchain") {
+       rspfile = "$exename.rsp"
+       pool = "//build/toolchain:link_pool($default_toolchain)"
+ 
+-      command = "$linker_wrapper$link /OUT:$exename /nologo ${sys_lib_flags} /PDB:$pdbname @$rspfile"
++
++      if (toolchain_args.current_cpu == "arm64" && is_arm64ec == true) {
++        command = "$linker_wrapper$link /OUT:$exename /MACHINE:ARM64EC /nologo ${sys_lib_flags} /PDB:$pdbname @$rspfile"
++      } else {
++        command = "$linker_wrapper$link /OUT:$exename /nologo ${sys_lib_flags} /PDB:$pdbname @$rspfile"
++      }
+ 
+       default_output_extension = ".exe"
+       default_output_dir = "{{root_out_dir}}"
+-- 
+2.53.0.windows.1
+
